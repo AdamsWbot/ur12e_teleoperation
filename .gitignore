@@ -1,0 +1,36 @@
+venv/
+__pycache__/
+*.pyc
+logs/
+.env
+*.key
+/output
+LinearRegression.cpp
+usingopencv.cpp
+# 编译产物
+*.o
+*.obj
+*.exe
+*.out
+
+# 编辑器/IDE 配置
+.vscode/
+*.suo
+*.user
+*.userosscache
+*.sln.docstates
+
+# 日志与临时文件
+*.log
+*.tmp
+*.temp
+
+# 环境与凭据
+.env.local
+.env.*.local
+credentials.json
+local.properties
+
+# 备份/临时压缩包
+*.zip
+*.tar.gz
