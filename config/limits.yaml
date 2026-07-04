@@ -1,0 +1,9 @@
+max_joint_speed: 1.0
+filter_alpha: 0.3
+
+workspace:
+  x: [-0.5, 0.5]
+  y: [-0.5, 0.5]
+  z: [0.1, 0.8]
+
+velocity: 0.25
