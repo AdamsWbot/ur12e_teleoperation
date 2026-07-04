@@ -1,0 +1,28 @@
+master:
+  ip: "192.168.0.101"          # 可覆盖: 环境变量 MASTER_IP
+  rtde_frequency: 125           # RTDE 读取频率 (Hz)
+
+slave:
+  ip: "192.168.0.102"          # 可覆盖: 环境变量 SLAVE_IP
+  rtde_frequency: 125           # RTDE 写入频率 (Hz)
+
+control:
+  frequency: 125                # 控制循环频率 (Hz)
+  max_joint_velocity: 1.2       # rad/s
+  enable_velocity_limit: true
+  enable_joint_limit: true
+  joint_limits:                 # 各关节软限位 (rad)
+    j1: [-6.28, 6.28]
+    j2: [-6.28, 6.28]
+    j3: [-3.14, 3.14]
+    j4: [-6.28, 6.28]
+    j5: [-6.28, 6.28]
+    j6: [-6.28, 6.28]
+
+filter:
+  enable: true
+  alpha: 0.2                    # EMA 平滑系数
+
+mapper:
+  scale: 1.0                    # 主从缩放因子 (1.0 = 1:1)
+  joint_offset: [0, 0, 0, 0, 0, 0]  # 关节零位偏移

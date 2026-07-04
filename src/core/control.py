@@ -1,4 +1,4 @@
-class Bridge:
+class SafetyController:
     def send(self, pose: Pose):
         pass
 
