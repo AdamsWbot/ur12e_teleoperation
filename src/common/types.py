@@ -49,6 +49,16 @@ class ControlResult:
     violations: tuple[str, ...]   # 空 tuple = 全部通过
 
 
+# ─── device 层输出 — 原始采集数据 ──────────────
+
+@dataclass(frozen=True)
+class RawDeviceData:
+    """device 层输出 — 原始数据，不做任何标准化。device 开发者只需懂硬件协议"""
+    joint: tuple[float, ...] | None = None   # 关节位置 (rad)，缺字段时 None
+    tcp: Pose | None = None                  # TCP 位姿，缺字段时 None
+    buttons: int = 0                         # 按钮状态位掩码，无按钮设备用默认值 0
+
+
 # ─── 主端设备抽象接口 ──────────────────────────
 
 class MasterReader(ABC):
@@ -61,8 +71,15 @@ class MasterReader(ABC):
     def disconnect(self) -> None: ...
 
     @abstractmethod
-    def read(self) -> RobotState: ...
+    def read(self) -> RawDeviceData: ...
 
     @property
     @abstractmethod
     def is_connected(self) -> bool: ...
+
+
+class MasterNormalizer(ABC):
+    """数据标准化接口 — master.py 实现，将 RawDeviceData 统一为 RobotState"""
+
+    @abstractmethod
+    def normalize(self, raw: RawDeviceData) -> RobotState: ...

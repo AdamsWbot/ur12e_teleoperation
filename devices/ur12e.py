@@ -1,11 +1,11 @@
 import time
 
 from src.common.config import MasterConfig
-from src.common.types import JointState, MasterReader, Pose, RobotState
+from src.common.types import MasterReader, Pose, RawDeviceData
 
 
 class UR12eReader(MasterReader):
-    """通过 RTDE 从 UR12e 主臂读取关节数据"""
+    """通过 RTDE 从 UR12e 主臂读取关节数据 — 只输出 RawDeviceData，不关心 RobotState"""
 
     def __init__(self, cfg: MasterConfig):
         self._ip = cfg.ip
@@ -29,12 +29,11 @@ class UR12eReader(MasterReader):
         self._connected = False
         # TODO: 断开 RTDE 连接
 
-    def read(self) -> RobotState:
-        timestamp = time.monotonic()
-        return RobotState(
-            timestamp=timestamp,
-            joint=JointState(q=(0.0, 0.0, 0.0, 0.0, 0.0, 0.0)),
-            tcp_pose=Pose(x=0.0, y=0.0, z=0.0, rx=0.0, ry=0.0, rz=0.0),
+    def read(self) -> RawDeviceData:
+        # TODO: 调用 rtde_receive_interface.getActualQ() 和 getActualTCPPose()
+        return RawDeviceData(
+            joint=(0.0, 0.0, 0.0, 0.0, 0.0, 0.0),
+            tcp=Pose(x=0.0, y=0.0, z=0.0, rx=0.0, ry=0.0, rz=0.0),
         )
 
     @property
