@@ -1,5 +1,7 @@
 import time
 
+from rtde_receive import RTDEReceiveInterface
+
 from src.common.config import MasterConfig
 from src.common.types import MasterReader, Pose, RawDeviceData
 
@@ -13,29 +15,36 @@ class UR12eReader(MasterReader):
         self._max_retries = cfg.max_retries
         self._retry_interval = cfg.retry_interval
         self._connected = False
+        self._rtde = None
 
     def connect(self) -> bool:
         for attempt in range(1, self._max_retries + 1):
             try:
-                # TODO: ur_rtde.RTDE 连接
-                self._connected = True
-                return True
+                self._rtde = RTDEReceiveInterface(self._ip, self._frequency)
+                self._connected = self._rtde.isConnected()
+                return self._connected
             except Exception:
                 if attempt < self._max_retries:
                     time.sleep(self._retry_interval)
         return False
 
     def disconnect(self) -> None:
+        if self._rtde is not None:
+            self._rtde.disconnect()
+            self._rtde = None
         self._connected = False
-        # TODO: 断开 RTDE 连接
 
     def read(self) -> RawDeviceData:
-        # TODO: 调用 rtde_receive_interface.getActualQ() 和 getActualTCPPose()
+        actual_q = self._rtde.getActualQ()
+        tcp = self._rtde.getActualTCPPose()
         return RawDeviceData(
-            joint=(0.0, 0.0, 0.0, 0.0, 0.0, 0.0),
-            tcp=Pose(x=0.0, y=0.0, z=0.0, rx=0.0, ry=0.0, rz=0.0),
+            joint=tuple(actual_q),
+            tcp=Pose(
+                x=tcp[0], y=tcp[1], z=tcp[2],
+                rx=tcp[3], ry=tcp[4], rz=tcp[5],
+            ),
         )
 
     @property
     def is_connected(self) -> bool:
-        return self._connected
+        return self._rtde is not None and self._rtde.isConnected()
