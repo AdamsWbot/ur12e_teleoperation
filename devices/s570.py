@@ -1,13 +1,14 @@
 import time
 
+from src.common.config import S570Config
 from src.common.types import JointState, MasterReader, Pose, RobotState
 
 
 class S570Reader(MasterReader):
     """通过 USB 串口从 myController S570 外骨骼读取关节数据"""
 
-    def __init__(self, cfg: dict):
-        self._usb_port = cfg.get("usb_port", "/dev/ttyUSB0")
+    def __init__(self, cfg: S570Config):
+        self._usb_port = cfg.usb_port
         self._connected = False
 
     def connect(self) -> bool:

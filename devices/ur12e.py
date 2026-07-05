@@ -1,16 +1,17 @@
 import time
 
+from src.common.config import MasterConfig
 from src.common.types import JointState, MasterReader, Pose, RobotState
 
 
 class UR12eReader(MasterReader):
     """通过 RTDE 从 UR12e 主臂读取关节数据"""
 
-    def __init__(self, cfg: dict):
-        self._ip = cfg["ip"]
-        self._frequency = cfg["rtde_frequency"]
-        self._max_retries = cfg.get("max_retries", 3)
-        self._retry_interval = cfg.get("retry_interval", 1.0)
+    def __init__(self, cfg: MasterConfig):
+        self._ip = cfg.ip
+        self._frequency = cfg.rtde_frequency
+        self._max_retries = cfg.max_retries
+        self._retry_interval = cfg.retry_interval
         self._connected = False
 
     def connect(self) -> bool:

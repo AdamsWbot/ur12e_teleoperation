@@ -1,13 +1,14 @@
 import time
 
+from src.common.config import KeyboardConfig
 from src.common.types import JointState, MasterReader, Pose, RobotState
 
 
 class KeyboardReader(MasterReader):
     """键盘控制 — 维护虚拟关节位置，按键增量调节"""
 
-    def __init__(self, cfg: dict):
-        self._joint_step = cfg.get("joint_step", 0.01)
+    def __init__(self, cfg: KeyboardConfig):
+        self._joint_step = cfg.joint_step
         self._q = [0.0] * 6
         self._connected = False
 
