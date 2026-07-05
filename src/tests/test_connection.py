@@ -11,7 +11,7 @@ import logging
 from rtde_control import RTDEControlInterface
 from rtde_receive import RTDEReceiveInterface
 
-ROBOT_IP = "1.2.3.4"   # 请根据实际修改///1111111需要协调设计修改
+ROBOT_IP = "127.0.0.1"   # 请根据实际修改///1111111需要协调设计修改
 
 def main():
     logging.basicConfig(level=logging.INFO)
