@@ -1,17 +1,38 @@
+# UR12e 主从机械臂遥操作 — 统一配置文件
+# 切换主端设备: 改 device → ur12e | s570 | keyboard
+
+device: "ur12e"
+
 master:
-  ip: "192.168.0.101"          # 可覆盖: 环境变量 MASTER_IP
-  rtde_frequency: 125           # RTDE 读取频率 (Hz)
+  ip: "192.168.0.101"
+  rtde_frequency: 125
+  max_retries: 3
+  retry_interval: 1.0
+
+s570:
+  usb_port: "/dev/ttyUSB0"
+
+keyboard:
+  joint_step: 0.01
+
+# ─── 从臂 ───────────────────────────────────────
 
 slave:
-  ip: "192.168.0.102"          # 可覆盖: 环境变量 SLAVE_IP
-  rtde_frequency: 125           # RTDE 写入频率 (Hz)
+  ip: "192.168.0.102"
+  rtde_frequency: 125
+  servoj_lookahead_time: 0.03
+  servoj_gain: 300
+  max_retries: 3
+  retry_interval: 1.0
+
+# ─── 安全控制 ────────────────────────────────────
 
 control:
-  frequency: 125                # 控制循环频率 (Hz)
-  max_joint_velocity: 1.2       # rad/s
+  frequency: 125
+  max_joint_velocity: 1.2
   enable_velocity_limit: true
   enable_joint_limit: true
-  joint_limits:                 # 各关节软限位 (rad)
+  joint_limits:
     j1: [-6.28, 6.28]
     j2: [-6.28, 6.28]
     j3: [-3.14, 3.14]
@@ -19,10 +40,14 @@ control:
     j5: [-6.28, 6.28]
     j6: [-6.28, 6.28]
 
+# ─── 滤波器 ─────────────────────────────────────
+
 filter:
   enable: true
-  alpha: 0.2                    # EMA 平滑系数
+  alpha: 0.2
+
+# ─── 主从映射 ────────────────────────────────────
 
 mapper:
-  scale: 1.0                    # 主从缩放因子 (1.0 = 1:1)
-  joint_offset: [0, 0, 0, 0, 0, 0]  # 关节零位偏移
+  scale: 1.0
+  joint_offset: [0, 0, 0, 0, 0, 0]
