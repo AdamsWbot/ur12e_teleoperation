@@ -1,7 +1,6 @@
 import time
 
-from src.common.types import JointState, Pose, RobotState
-from src.core.master import MasterReader
+from src.common.types import JointState, MasterReader, Pose, RobotState
 
 
 class S570Reader(MasterReader):
