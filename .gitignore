@@ -5,8 +5,8 @@ logs/
 .env
 *.key
 /output
-LinearRegression.cpp
-usingopencv.cpp
+
+
 计划.md
 # 编译产物
 *.o
