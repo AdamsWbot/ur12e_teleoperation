@@ -13,16 +13,26 @@ class SafetyController:
         """校验 RobotCommand 并返回 ControlResult"""
         violations = []
         q_list = list(command.joint.q)
+        delta_list = list(command.delta.q)
         passed = True
+
+        # 反推上一帧关节位置（用于限位/速度截断后同步更新 joint 和 delta）
+        prev_q = tuple(
+            command.joint.q[i] - command.delta.q[i]
+            for i in range(6)
+        )
 
         # 1. 异常值检测 (NaN / Inf)
         for val in q_list:
             if not math.isfinite(val):
                 violations.append("Invalid value (NaN/Inf) detected")
-                passed = False
-                return ControlResult(command=self.emergency_stop(), passed=False, violations=tuple(violations))
+                return ControlResult(
+                    command=self.emergency_stop(),
+                    passed=False,
+                    violations=tuple(violations)
+                )
 
-        # 2. 关节限位检查
+        # 2. 关节限位检查（截断后同步更新 delta）
         if self._cfg.enable_joint_limit:
             limits = [
                 self._cfg.joint_limits.j1, self._cfg.joint_limits.j2,
@@ -33,27 +43,36 @@ class SafetyController:
                 min_l, max_l = limits[i]
                 if q_list[i] < min_l:
                     q_list[i] = min_l
+                    delta_list[i] = q_list[i] - prev_q[i]
                     violations.append(f"Joint {i+1} exceed min limit")
                     passed = False
                 elif q_list[i] > max_l:
                     q_list[i] = max_l
+                    delta_list[i] = q_list[i] - prev_q[i]
                     violations.append(f"Joint {i+1} exceed max limit")
                     passed = False
 
-        # 3. 速度限幅检查
+        # 3. 速度限幅检查与截断
         if self._cfg.enable_velocity_limit and self._dt > 0:
             for i in range(6):
-                vel = abs(command.delta.q[i]) / self._dt
+                vel = abs(delta_list[i]) / self._dt
                 if vel > self._cfg.max_joint_velocity:
-                    violations.append(f"Joint {i+1} exceeds max velocity")
+                    violations.append(
+                        f"Joint {i+1} exceeds max velocity "
+                        f"(vel={vel:.3f} > {self._cfg.max_joint_velocity})"
+                    )
                     passed = False
-                    # 简单截断处理：若超速，此处逻辑后续需要调整
-        
-        # 构造安全指令（若违规，使用截断后的 q）
+                    # 按比例缩减 delta，使速度降至 max_joint_velocity 以内
+                    scale = self._cfg.max_joint_velocity / vel
+                    delta_list[i] = delta_list[i] * scale
+                    # 同步更新 joint
+                    q_list[i] = prev_q[i] + delta_list[i]
+
+        # 构造安全指令（使用截断后的 q 和 delta）
         safe_command = RobotCommand(
             timestamp=command.timestamp,
             joint=JointState(q=tuple(q_list)),
-            delta=command.delta
+            delta=JointState(q=tuple(delta_list))
         )
 
         return ControlResult(
