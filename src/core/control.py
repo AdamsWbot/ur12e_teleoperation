@@ -23,11 +23,13 @@ class SafetyController:
         )
 
         # 1. 异常值检测 (NaN / Inf)
+        # 注意：必须优先于限位/速度检查，否则 NaN 会逃逸比较运算
+        # (Python 中 float('nan') < 5.0 为 False，限位检查会静默放过 NaN)
         for val in q_list:
             if not math.isfinite(val):
                 violations.append("Invalid value (NaN/Inf) detected")
                 return ControlResult(
-                    command=self.emergency_stop(),
+                    command=self.emergency_stop(timestamp=command.timestamp),
                     passed=False,
                     violations=tuple(violations)
                 )
@@ -81,10 +83,10 @@ class SafetyController:
             violations=tuple(violations)
         )
 
-    def emergency_stop(self) -> RobotCommand:
+    def emergency_stop(self, timestamp: float = 0.0) -> RobotCommand:
         """生成紧急停止指令（全零关节位置与速度）"""
         return RobotCommand(
-            timestamp=0.0,
+            timestamp=timestamp,
             joint=JointState(q=(0.0, 0.0, 0.0, 0.0, 0.0, 0.0)),
             delta=JointState(q=(0.0, 0.0, 0.0, 0.0, 0.0, 0.0))
         )

@@ -61,4 +61,6 @@ class Mapper:
 
     def set_offset(self, joint_idx: int, offset: float) -> None:
         """预留接口：设置关节偏移"""
-        pass
+        lst = list(self._offset)
+        lst[joint_idx] = offset
+        self._offset = tuple(lst)
