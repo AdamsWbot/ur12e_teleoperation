@@ -6,7 +6,7 @@ from src.common.types import (
     RobotState,
     JointState,
     Pose,
-    MasterReader,
+    RawDeviceData,
 )
 from src.core.master import DefaultNormalizer
 
@@ -50,13 +50,14 @@ def test_master_connection_and_read():
     except Exception as e:
         pytest.fail(f"无法加载 config/config.yaml: {e}")
 
-    # 2. 导入并使用真实的 UR12eReader（由 P0 完成，不允许修改）
+    # 2. 通过 SystemFactory 创建设备（计划 §5.3：统一入口，禁止直接 import 设备类）
     try:
-        from src.devices.ur12e import UR12eReader
+        from src.core.factory import SystemFactory
     except ImportError as e:
-        pytest.skip(f"真实 UR12eReader 不可用（可能缺少 rtde_receive 包）：{e}")
+        pytest.skip(f"SystemFactory 不可用：{e}")
 
-    reader = UR12eReader(cfg.master)
+    factory = SystemFactory(cfg)
+    reader = factory.create_device()
     normalizer = DefaultNormalizer()
 
     # 连接（内部自动重试）

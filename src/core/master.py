@@ -18,6 +18,10 @@ class DefaultNormalizer(MasterNormalizer):
         # 2. 关节数据 — raw.joint 为 None 时补 (0.0,) * 6
         if raw.joint is None or len(raw.joint) == 0:
             joint = JointState(q=(0.0,) * 6)
+        elif len(raw.joint) != 6:
+            raise ValueError(
+                f"raw.joint 应为 6 轴数据，实际收到 {len(raw.joint)} 轴: {raw.joint}"
+            )
         else:
             joint = JointState(q=tuple(raw.joint))
         
