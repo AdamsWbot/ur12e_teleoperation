@@ -1,42 +1,32 @@
-import yaml
-import logging
-from rtde_control import RTDEControlInterface
-from rtde_receive import RTDEReceiveInterface
+# src/core/master.py
+import time
+from src.common.types import (
+    RawDeviceData,
+    RobotState,
+    JointState,
+    Pose,
+    MasterNormalizer,
+)
 
-logger = logging.getLogger(__name__)
-
-class DefaultNormalizer:
-    """
-    用于将操作员输入（例如遥操作手柄的位移/角度）标准化为机器人期望的关节或TCP增量。
-    具体算法待后续实现，目前提供接口框架。
-    """
-    def __init__(self, config_path=None):
-        self.input_range = [-1.0, 1.0]   # 输入范围（示例）
-        self.output_scale = 0.1          # 输出比例因子
-
-        if config_path:
-            with open(config_path, 'r') as f:
-                self.config = yaml.safe_load(f)
+class DefaultNormalizer(MasterNormalizer):
+    """将 RawDeviceData 标准化为 RobotState（计划 §2.3）"""
+    
+    def normalize(self, raw: RawDeviceData) -> RobotState:
+        # 1. 时间戳统一 — 使用 time.monotonic()
+        timestamp = time.monotonic()
+        
+        # 2. 关节数据 — raw.joint 为 None 时补 (0.0,) * 6
+        if raw.joint is None or len(raw.joint) == 0:
+            joint = JointState(q=(0.0,) * 6)
         else:
-            self.config = {}
-
-        logger.info("DefaultNormalizer initialized with config: %s", self.config)
-
-    def normalize_position(self, raw_value):
-        """
-        将原始位置数据映射为机器人关节/位姿增量
-        :param raw_value:  float 或 list，从操作员端接收的输入
-        :return:          float 或 list，机器人可用的命令增量
-        """
-        # 占位实现：直接乘以比例因子
-        if isinstance(raw_value, list):
-            return [v * self.output_scale for v in raw_value]
-        return raw_value * self.output_scale
-
-    def normalize_velocity(self, raw_value):
-        """
-        将原始速度映射为机器人关节/位姿速度
-        """
-        if isinstance(raw_value, list):
-            return [v * self.output_scale * 0.5 for v in raw_value]  # 速度缩放更保守
-        return raw_value * self.output_scale * 0.5
+            joint = JointState(q=tuple(raw.joint))
+        
+        # 3. TCP 位姿 — raw.tcp 为 None 时补 Pose(0,0,0,0,0,0)
+        tcp = raw.tcp if raw.tcp is not None else Pose(0, 0, 0, 0, 0, 0)
+        
+        # 4. 构造并返回 RobotState
+        return RobotState(
+            timestamp=timestamp,
+            joint=joint,
+            tcp_pose=tcp,
+        )
