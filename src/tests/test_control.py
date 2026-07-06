@@ -79,6 +79,15 @@ class TestSafetyControllerValidate:
         assert result.command.joint.q == (0.0,) * 6
         assert result.command.delta.q == (0.0,) * 6
 
+    def test_nan_in_last_joint_detected(self):
+        """NaN 出现在最后一个关节（j6）也应被检测到 — 验证遍历不漏检"""
+        cmd = make_command((0.0, 0.0, 0.0, 0.0, 0.0, float("nan")))
+        result = self.controller.validate(cmd)
+        assert not result.passed
+        assert "NaN/Inf" in result.violations[0]
+        assert result.command.joint.q == (0.0,) * 6
+        assert result.command.delta.q == (0.0,) * 6
+
     # ── 关节限位检查（关闭速度限幅以隔离测试）─────────
 
     def test_joint_below_min_is_clipped(self):
@@ -129,6 +138,19 @@ class TestSafetyControllerValidate:
         result = ctrl.validate(cmd)
         assert not result.passed
         assert result.command.delta.q[0] == pytest.approx(6.28 - 10.0)
+
+    def test_joint_at_limit_boundary_passes(self):
+        """关节位置恰好等于限位边界值 → 通过，不触发 violation（关速度限幅以隔离）"""
+        cfg = make_config(enable_velocity_limit=False)
+        ctrl = SafetyController(cfg)
+        # j1 下限 -6.28，上限 6.28
+        cmd = make_command((-6.28, 6.28, 0.0, 0.0, 0.0, 0.0))
+        result = ctrl.validate(cmd)
+        assert result.passed
+        assert result.violations == ()
+        # 值保持不变
+        assert result.command.joint.q[0] == pytest.approx(-6.28)
+        assert result.command.joint.q[1] == pytest.approx(6.28)
 
     # ── 速度限幅检查 ──────────────────────────────────
 
@@ -187,6 +209,22 @@ class TestSafetyControllerValidate:
         assert result.command.delta.q[0] < 0  # 保持负方向
         assert result.command.joint.q[0] < 0  # joint 也保持负方向
 
+    def test_joint_and_velocity_violations_together(self):
+        """同一关节同时超限和超速 → 两种 violation 都被记录，最终值以限位截断为准"""
+        # q[0]=10.0 > j1_max=6.28 → 超限；delta[0]=2.0 → 超速 (vel=2.0/0.008=250 >> 1.2)
+        # 预期：先限位截断到 6.28，delta 同步为 6.28-prev_q，再对 delta 做速度缩放
+        cmd = make_command(
+            joint_values=(10.0, 0.0, 0.0, 0.0, 0.0, 0.0),
+            delta_values=(2.0, 0.0, 0.0, 0.0, 0.0, 0.0),
+        )
+        result = self.controller.validate(cmd)
+        assert not result.passed
+        # 应有两条 violation：限位 + 超速
+        violation_msgs = " ".join(result.violations).lower()
+        assert "exceed" in violation_msgs  # 限位违规
+        assert "velocity" in violation_msgs or "vel" in violation_msgs  # 超速违规
+        assert len(result.violations) >= 2
+
     # ── 开关关闭 ──────────────────────────────────────
 
     def test_joint_limit_disabled(self):
@@ -209,6 +247,22 @@ class TestSafetyControllerValidate:
         result = controller.validate(cmd)
         assert result.passed  # 速度未检查
         assert result.command.delta.q[0] == pytest.approx(0.5)  # 未缩减
+
+    def test_zero_frequency_fallback_dt(self):
+        """frequency=0 时 _dt 应回退为 0.01，不抛出异常"""
+        cfg = make_config(frequency=0)
+        controller = SafetyController(cfg)
+        # _dt 应为 0.01（回退值），而非除零错误
+        assert controller._dt == pytest.approx(0.01)
+        # 验证速度限位仍能正常工作
+        cmd = make_command(
+            joint_values=(0.1, 0.0, 0.0, 0.0, 0.0, 0.0),
+            delta_values=(0.1, 0.0, 0.0, 0.0, 0.0, 0.0),
+        )
+        # dt=0.01 → vel=0.1/0.01=10 > 1.2 → 应缩减
+        result = controller.validate(cmd)
+        assert not result.passed
+        assert result.command.delta.q[0] < 0.1
 
     # ── joint 与 delta 一致性验证 ─────────────────────
 
@@ -237,3 +291,11 @@ class TestSafetyControllerEmergencyStop:
         assert cmd.joint.q == (0.0,) * 6
         assert cmd.delta.q == (0.0,) * 6
         assert cmd.timestamp == 0.0
+
+    def test_emergency_stop_with_custom_timestamp(self):
+        """emergency_stop(timestamp=42.0) 应保留自定义时间戳"""
+        controller = SafetyController(make_config())
+        cmd = controller.emergency_stop(timestamp=42.0)
+        assert cmd.timestamp == pytest.approx(42.0)
+        assert cmd.joint.q == (0.0,) * 6
+        assert cmd.delta.q == (0.0,) * 6
