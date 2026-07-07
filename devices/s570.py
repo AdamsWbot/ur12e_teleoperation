@@ -69,11 +69,15 @@ class S570Reader(MasterReader):
         self._connected = False
 
     def read(self) -> RawDeviceData:
-        """读取左臂关节数据，返回 RawDeviceData。"""
+        """读取左臂关节数据和按钮状态，返回 RawDeviceData。
+
+        S570 协议（命令 0x02）返回 7 个关节 + 按钮/摇杆状态 + 笛卡尔坐标。
+        关节取前 6 个（J7 丢弃），按钮以位掩码形式保留。
+        """
         data = self._send_command(bytes([0x02, 0x01]))  # GET_ARM_DATA arm=1
-        angles = self._parse_angles(data)
+        angles, buttons = self._parse_response(data)
         joint = tuple(math.radians(a) for a in angles[:6])
-        return RawDeviceData(joint=joint, tcp=None)
+        return RawDeviceData(joint=joint, tcp=None, buttons=buttons)
 
     @property
     def is_connected(self) -> bool:
@@ -102,8 +106,14 @@ class S570Reader(MasterReader):
                 raise IOError("S570: incomplete frame")
             return remaining[:-1].hex()
 
-    def _parse_angles(self, data: str) -> list[float]:
-        """从 hex 响应中解析 7 个关节角度（度）。"""
+    def _parse_response(self, data: str) -> tuple[list[float], int]:
+        """从 hex 响应中解析关节角度（度）和按钮状态。
+
+        响应格式（命令 0x02，来源 S570 串口协议文档）:
+            回显(1B) | J1..J7(各2B) | 按钮(1B) | 摇杆X(1B) | 摇杆Y(1B) | 笛卡尔(12B)
+
+        按钮位掩码: bit1=摇杆按钮, bit2=按钮1, bit3=按钮2
+        """
         # 跳过前 2 hex 字符（命令回显字节）
         payload = data[2:]
         angles = []
@@ -113,4 +123,11 @@ class S570Reader(MasterReader):
                 break
             encoded = _hex_to_signed_decimal(hex_val)
             angles.append(_decode_angle(encoded))
-        return angles
+
+        # 按钮状态位于 7 关节之后（偏移 28 hex 字符，1 字节）
+        btn_offset = 7 * 4  # 28
+        buttons = 0
+        if len(payload) >= btn_offset + 2:
+            buttons = int(payload[btn_offset : btn_offset + 2], 16)
+
+        return angles, buttons
