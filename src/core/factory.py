@@ -27,10 +27,11 @@ class SystemFactory:
 
     def create_mapper(self):
         t = self.cfg.device
+        limits = self.cfg.control.joint_limits
         if t == "ur12e":
-            return IdentityMapper()
+            return IdentityMapper(limits)
         elif t == "s570":
-            return S570Mapper()
+            return S570Mapper(limits)
         elif t == "keyboard":
-            return KeyboardMapper()
+            return KeyboardMapper(limits)
         raise ValueError(f"Unknown device type: {t}")

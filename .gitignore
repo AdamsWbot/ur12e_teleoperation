@@ -5,7 +5,7 @@ logs/
 .env
 *.key
 /output
-
+/mytest
 
 计划.md
 # 编译产物
