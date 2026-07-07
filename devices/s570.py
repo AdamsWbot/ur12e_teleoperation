@@ -13,20 +13,8 @@ _BAUDRATE = 1_000_000
 _FRAME_HEAD = b"\xfe\xfe"
 _FRAME_TAIL = 0xFA
 
-# 命令
-_CMD_GET_ALL_DATA = bytes([0xFE, 0xFE, 0x02, 0x01, 0xFA])
-_CMD_GET_ARM_DATA = bytes([0xFE, 0xFE, 0x03, 0x02])  # + [arm] + [0xFA]
-
 # 角度编码基准
 _ANGLE_CENTER = 2048
-
-
-def _hex_to_signed_decimal(hex_str: str, bits: int = 16) -> int:
-    """将 hex 字符串转为有符号整数。"""
-    value = int(hex_str, 16)
-    if value >= 2 ** (bits - 1):
-        value -= 2**bits
-    return value
 
 
 def _decode_angle(encoded: int) -> float:
@@ -100,8 +88,12 @@ class S570Reader(MasterReader):
             data_len_byte = self._ser.read(1)
             if not data_len_byte:
                 raise IOError("S570: timeout reading data length")
+            data_len = data_len_byte[0]
+            # 命令 0x02 响应长度范围: 19(不含笛卡尔)~31(含笛卡尔+尾)
+            if not (19 <= data_len <= 35):
+                raise IOError(f"S570: unexpected response length {data_len} (expected 19-35)")
             # 读取剩余数据 + 尾字节
-            remaining = self._ser.read(data_len_byte[0])
+            remaining = self._ser.read(data_len)
             if not remaining or remaining[-1] != _FRAME_TAIL:
                 raise IOError("S570: incomplete frame")
             return remaining[:-1].hex()
@@ -121,7 +113,7 @@ class S570Reader(MasterReader):
             hex_val = payload[i * 4 : (i + 1) * 4]
             if len(hex_val) < 4:
                 break
-            encoded = _hex_to_signed_decimal(hex_val)
+            encoded = int(hex_val, 16)  # 无符号 16-bit 偏移量，范围 0-4096
             angles.append(_decode_angle(encoded))
 
         # 按钮状态位于 7 关节之后（偏移 28 hex 字符，1 字节）
