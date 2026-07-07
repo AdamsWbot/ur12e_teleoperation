@@ -4,7 +4,7 @@
 device: "ur12e"
 
 master:
-  ip: "192.168.0.101"
+  ip: "127.0.0.1"
   rtde_frequency: 125
   max_retries: 3
   retry_interval: 1.0

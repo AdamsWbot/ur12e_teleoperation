@@ -7,7 +7,7 @@ logs/
 /output
 /mytest
 
-计划.md
+/plans
 # 编译产物
 *.o
 *.obj

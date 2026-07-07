@@ -38,6 +38,7 @@ def test_normalizer_fills_missing_fields():
 
 
 # ---------- 测试 2：集成连接（需要真实硬件或 URSim） ----------
+@pytest.mark.timeout(10)
 def test_master_connection_and_read():
     """
     使用 P0 交付的 UR12eReader，验证完整链路：
