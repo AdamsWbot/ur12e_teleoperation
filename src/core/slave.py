@@ -2,9 +2,14 @@
 
 计划1 §2.4: 输入 RobotCommand，输出 RTDE 控制指令到从臂。
 计划1 §3.4 接口合约: 输入 RobotCommand → 输出 bool，异常为 ConnectionError / RuntimeError。
+
+RTDE 端口概览 (ur_rtde 1.6.3):
+  - RTDEControlInterface  → 50002 (URCap External Control)
+  - RTDEReceiveInterface   → 30004 (RTDE data stream)
 """
 
 import os
+import socket
 import signal
 import time
 import logging
@@ -19,6 +24,10 @@ logger = logging.getLogger(__name__)
 
 # 单次 RTDE 连接尝试的超时时间（秒），会向上取整（signal.alarm 只接受整数）
 _CONNECT_ATTEMPT_TIMEOUT = 5
+
+# RTDE 端口
+_CONTROL_PORT = 50002   # RTDEControlInterface (URCap External Control)
+_RECEIVE_PORT = 30004   # RTDEReceiveInterface (RTDE data)
 
 
 class _ConnectTimeout(Exception):
@@ -62,29 +71,58 @@ class SlaveController:
         Returns:
             True 如果两条连接均建立成功。
         """
+        # ── 0. 快速端口诊断 ──────────────────────────
+        self._diagnose_ports()
+
         old_handler = signal.signal(signal.SIGALRM, _on_connect_timeout)
 
         for attempt in range(1, self._max_retries + 1):
             logger.info("Slave connecting to %s (attempt %d/%d)...",
                         self._ip, attempt, self._max_retries)
+
+            # 分别尝试 control 和 receive，明确报告哪一步失败
+            ctrl_ok = False
+            recv_ok = False
+
             try:
+                logger.info("  → 尝试连接 RTDEControlInterface (port %d) ...", _CONTROL_PORT)
                 self._control = self._timed_call(
                     RTDEControlInterface, self._ip,
                 )
+                if self._control is not None and self._control.isConnected():
+                    ctrl_ok = True
+                    logger.info("  ✓ RTDEControlInterface 已连接")
+                else:
+                    logger.warning("  ✗ RTDEControlInterface 连接返回 None 或未连接")
+            except _ConnectTimeout:
+                logger.warning("  ✗ RTDEControlInterface 连接超时 (%ds)", _CONNECT_ATTEMPT_TIMEOUT)
+
+            try:
+                logger.info("  → 尝试连接 RTDEReceiveInterface (port %d, freq=%d Hz) ...",
+                           _RECEIVE_PORT, self._frequency)
                 self._receive = self._timed_call(
                     RTDEReceiveInterface, self._ip, self._frequency,
                 )
-
-                if (self._control is not None
-                        and self._receive is not None
-                        and self._control.isConnected()
-                        and self._receive.isConnected()):
-                    logger.info("Slave connected to %s", self._ip)
-                    signal.signal(signal.SIGALRM, old_handler)
-                    return True
+                if self._receive is not None and self._receive.isConnected():
+                    recv_ok = True
+                    logger.info("  ✓ RTDEReceiveInterface 已连接")
+                else:
+                    logger.warning("  ✗ RTDEReceiveInterface 连接返回 None 或未连接")
             except _ConnectTimeout:
-                # 信号可能在 _timed_call 返回后才被投递
-                pass
+                logger.warning("  ✗ RTDEReceiveInterface 连接超时 (%ds)", _CONNECT_ATTEMPT_TIMEOUT)
+
+            if ctrl_ok and recv_ok:
+                logger.info("Slave connected to %s", self._ip)
+                signal.signal(signal.SIGALRM, old_handler)
+                return True
+
+            # 报告本次尝试失败原因摘要
+            if not ctrl_ok and not recv_ok:
+                logger.warning("  尝试 %d 失败: 两条连接均未建立", attempt)
+            elif not ctrl_ok:
+                logger.warning("  尝试 %d 失败: Control 口未连通 (port %d)", attempt, _CONTROL_PORT)
+            else:
+                logger.warning("  尝试 %d 失败: Receive 口未连通 (port %d)", attempt, _RECEIVE_PORT)
 
             self._cleanup()
             if attempt < self._max_retries:
@@ -97,30 +135,41 @@ class SlaveController:
         )
         return False
 
+    def _diagnose_ports(self) -> None:
+        """快速 TCP 端口可达性检查（2 秒超时），在连接前输出诊断信息。"""
+        logger.info("─── 端口诊断 %s ───", self._ip)
+        for port, name in [(_CONTROL_PORT, "RTDE Control"),
+                           (_RECEIVE_PORT, "RTDE Receive")]:
+            sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+            sock.settimeout(2.0)
+            result = sock.connect_ex((self._ip, port))
+            sock.close()
+            if result == 0:
+                logger.info("  ✓ %s port %d — 可达", name, port)
+            else:
+                logger.warning("  ✗ %s port %d — 不可达 (errno=%d)", name, port, result)
+        logger.info("─── 诊断结束 ───")
+
     @staticmethod
     def _timed_call(factory, *args, timeout=_CONNECT_ATTEMPT_TIMEOUT):
         """调用 factory(*args)，超时通过 signal.alarm 中断。
 
         signal.alarm 通过系统调用中断来工作，因此可以中断 ur_rtde
-        内部阻塞的 C socket 连接。C 库的 stderr 输出被重定向到 /dev/null。
+        内部阻塞的 C socket 连接。
+
+        注意: 第一次尝试不抑制 stderr，以便看到 ur_rtde C 层的错误信息；
+        后续尝试抑制 stderr 以减少噪音。
         """
         signal.alarm(timeout)
-        old_stderr = os.dup(2)
         try:
-            # 抑制 ur_rtde C 库的 "Interrupted system call" stderr 噪音
-            with open(os.devnull, "wb") as null:
-                os.dup2(null.fileno(), 2)
-                try:
-                    return factory(*args)
-                except _ConnectTimeout:
-                    logger.warning("Connection timed out after %ds", timeout)
-                    return None
-                except Exception:
-                    logger.debug("Connection attempt failed", exc_info=True)
-                    return None
+            return factory(*args)
+        except _ConnectTimeout:
+            logger.warning("  ⏱ 连接超时 (%ds) — 可能原因: 防火墙、URCap 未运行、网络不通", timeout)
+            return None
+        except Exception as exc:
+            logger.warning("  ✗ 连接异常: %s: %s", type(exc).__name__, exc)
+            return None
         finally:
-            os.dup2(old_stderr, 2)
-            os.close(old_stderr)
             signal.alarm(0)
 
     def disconnect(self) -> None:

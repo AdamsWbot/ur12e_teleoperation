@@ -18,7 +18,7 @@ keyboard:
 # ─── 从臂 ───────────────────────────────────────
 
 slave:
-  ip: "127.0.0.1"
+  ip: "192.168.1.100"
   rtde_frequency: 125
   servoj_lookahead_time: 0.03
   servoj_gain: 300
