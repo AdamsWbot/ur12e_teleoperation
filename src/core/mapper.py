@@ -130,24 +130,51 @@ class S570Mapper(Mapper):
     S570 是人体外骨骼（文档: docs.elephantrobotics.com/docs/myController-S570-cn/），
     每臂 7 关节（J1-J7），±180° 范围。
 
-    数据流（全链路）:
-        s570.py: 读 7 关节 → joint_mapping 选 6 个 → RawDeviceData(6 关节)
-        master.py: 标准化时间戳 + 缺字段补零 → RobotState(6 关节, 弧度)
-        mapper.py: calibrate(零位) + direction×scale+offset → RobotCommand
+    ── config.yaml → 代码链接 ──────────────────────
+    s570.joint_mapping   → s570.py 选6个关节 + mapper.set_joint_mapping() 存映射
+    s570.joint_direction → mapper.set_all_directions()
+    mapper.scale         → mapper.set_scale()
+    mapper.joint_offset  → mapper.set_offset() 逐关节
+    s570.enable_calibration → run_system.py 调用 mapper.calibrate()
 
-    配置来源（config.yaml）:
-        s570.joint_mapping  → s570.py 选择哪 6 个关节 (1-based)
-        s570.joint_direction → mapper.set_all_directions()
-        mapper.scale         → mapper.set_scale()
-        mapper.joint_offset  → mapper.set_offset() 逐关节设置
-        s570.enable_calibration → run_system.py 调用 mapper.calibrate()
+    ── 数据流（全链路）─────────────────────────────
+    s570.py: 读 7 关节 → joint_mapping 选 6 → RawDeviceData(6, 弧度)
+    master.py: 时间戳 + 补零 → RobotState(6)
+    mapper.py: calibrate + direction×scale+offset → RobotCommand(6)
 
-    典型校准流程:
-        1. 穿戴 S570，将手臂置于 UR12e 零位姿态
-        2. 启动 run_system.py → 自动调用 calibrate() 记录零点偏移
-        3. 逐一活动关节，观察从臂跟随方向
-        4. 若关节反向，修改 config.yaml joint_direction 对应位置为 -1
+    ── 实机校准流程 ────────────────────────────────
+    1. 穿戴 S570，手臂置于 UR12e 零位姿态
+    2. 启动 → auto calibrate() 记录零点偏移
+    3. 逐关节活动，观察从臂跟随方向
+    4. 若反向: 改 config.yaml joint_direction 对应位置为 -1
+    5. 若关节错位: 改 joint_mapping 调整 S570→UR 对应关系
     """
+
+    def __init__(self, joint_limits: JointLimits):
+        super().__init__(joint_limits)
+        # 与 s570.py 共享的映射配置，由 run_system.py 调用 set_joint_mapping() 同步
+        self._joint_mapping: tuple[int, ...] = (1, 2, 3, 4, 5, 6)
+
+    def set_joint_mapping(self, mapping: tuple[int, ...]) -> None:
+        """设置 S570→UR 关节映射（来自 config.yaml s570.joint_mapping）。
+
+        1-based 索引，6 个元素，值 ∈ {1..7}，无重复。
+        此值需与 S570Reader._mapping 一致——两者均源自 config.yaml
+        同一字段，实机调试时修改 config 即可同步。
+        """
+        if len(mapping) != 6:
+            raise ValueError(f"joint_mapping 需要恰好 6 个元素，实际: {len(mapping)}")
+        for val in mapping:
+            if val not in range(1, 8):
+                raise ValueError(f"joint_mapping 值必须在 1-7，实际含: {val}")
+        if len(set(mapping)) != len(mapping):
+            raise ValueError(f"joint_mapping 包含重复值: {mapping}")
+        self._joint_mapping = tuple(mapping)
+
+    @property
+    def joint_mapping(self) -> tuple[int, ...]:
+        """当前 S570→UR 关节映射（1-based，6 个元素）"""
+        return self._joint_mapping
 
     def _map_joint(self, joint: JointState) -> JointState:
         return self._apply_transform(joint)

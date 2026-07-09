@@ -201,6 +201,40 @@ class TestS570Mapper:
         with pytest.raises(ValueError, match="±1"):
             m.set_all_directions((1, 1, 1, 1, 1, 0))
 
+    # ── set_joint_mapping（来自 config.yaml）─────
+
+    def test_set_joint_mapping_default(self):
+        m = S570Mapper(_limits())
+        assert m.joint_mapping == (1, 2, 3, 4, 5, 6)
+
+    def test_set_joint_mapping_custom(self):
+        m = S570Mapper(_limits())
+        m.set_joint_mapping((2, 3, 4, 5, 6, 7))
+        assert m.joint_mapping == (2, 3, 4, 5, 6, 7)
+
+    def test_set_joint_mapping_bad_length(self):
+        m = S570Mapper(_limits())
+        with pytest.raises(ValueError, match="恰好 6"):
+            m.set_joint_mapping((1, 2, 3, 4, 5))
+
+    def test_set_joint_mapping_out_of_range(self):
+        m = S570Mapper(_limits())
+        with pytest.raises(ValueError, match="1-7"):
+            m.set_joint_mapping((1, 2, 3, 4, 5, 8))
+
+    def test_set_joint_mapping_duplicate(self):
+        m = S570Mapper(_limits())
+        with pytest.raises(ValueError, match="重复"):
+            m.set_joint_mapping((1, 1, 3, 4, 5, 6))
+
+    def test_joint_mapping_link_to_config(self):
+        """验证 mapper.joint_mapping 与 cfg.s570.joint_mapping 使用同一数据"""
+        from src.common.config import load_app_config
+        cfg = load_app_config("config/config.yaml")
+        m = S570Mapper(_limits())
+        m.set_joint_mapping(cfg.s570.joint_mapping)
+        assert m.joint_mapping == tuple(cfg.s570.joint_mapping)
+
 
 # ═══════════════════════════════════════════════════════
 #  KeyboardMapper
