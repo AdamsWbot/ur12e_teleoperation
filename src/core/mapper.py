@@ -108,14 +108,41 @@ class S570Mapper(Mapper):
     """S570 外骨骼 → UR12e 关节映射
 
     S570 是人体外骨骼（文档: docs.elephantrobotics.com/docs/myController-S570-cn/），
-    6+6 DOF，每关节 ±180°。人体手臂关节旋转方向与 UR12e 机器人坐标系可能不一致，
-    需要通过 set_direction() 逐关节校准符号。
+    每臂 7 关节（J1-J7），±180° 范围。映射到 UR12e 的 6 关节时，
+    需丢弃 1 个关节（默认丢弃 J7 = drop_joint=6）。
+
+    关节数据流:
+        s570.py: 完整 7 关节 → RawDeviceData
+        master.py: 根据 drop_index 丢弃 1 个 → RobotState(6 关节)
+        mapper.py: 对 6 关节做 direction×scale+offset 变换 → RobotCommand
 
     典型校准流程:
         1. 穿戴 S570，将手臂置于 UR12e 的零位姿态
         2. 逐一活动每个关节，观察从臂跟随方向
         3. 若关节反向运动，调用 set_direction(idx, -1) 反转
+        4. 若不明确哪个是 J7，调用 set_drop_joint(idx) 尝试不同丢弃位置
     """
+
+    def __init__(self, joint_limits: JointLimits, drop_joint: int = 6):
+        super().__init__(joint_limits)
+        if not (0 <= drop_joint <= 6):
+            raise ValueError(f"drop_joint 必须在 0-6，收到 {drop_joint}")
+        self._drop_joint = drop_joint
+
+    @property
+    def drop_joint(self) -> int:
+        """要丢弃的 S570 关节索引（0-based，默认 6 = J7）"""
+        return self._drop_joint
+
+    def set_drop_joint(self, idx: int) -> None:
+        """设置要丢弃的关节索引（0-based，0=J1, 6=J7）。
+
+        S570 有 7 个关节，UR12e 只有 6 个。通过此方法选择丢弃哪个。
+        默认丢弃 J7（最末关节），不确定映射关系时可尝试其他值。
+        """
+        if not (0 <= idx <= 6):
+            raise ValueError(f"drop_joint 必须在 0-6，收到 {idx}")
+        self._drop_joint = idx
 
     def _map_joint(self, joint: JointState) -> JointState:
         return self._apply_transform(joint)

@@ -60,11 +60,12 @@ class S570Reader(MasterReader):
         """读取左臂关节数据和按钮状态，返回 RawDeviceData。
 
         S570 协议（命令 0x02）返回 7 个关节 + 按钮/摇杆状态 + 笛卡尔坐标。
-        关节取前 6 个（J7 丢弃），按钮以位掩码形式保留。
+        设备层不做裁剪，完整透传全部 7 个关节（弧度）。
+        关节选择（如丢弃哪个）由下游 mapper 配置决定。
         """
         data = self._send_command(bytes([0x02, 0x01]))  # GET_ARM_DATA arm=1
         angles, buttons = self._parse_response(data)
-        joint = tuple(math.radians(a) for a in angles[:6])
+        joint = tuple(math.radians(a) for a in angles)  # 完整 7 关节
         return RawDeviceData(joint=joint, tcp=None, buttons=buttons)
 
     @property
