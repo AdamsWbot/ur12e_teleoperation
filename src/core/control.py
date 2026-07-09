@@ -9,7 +9,7 @@ class EStopState(Enum):
     """急停状态机状态"""
     NORMAL = auto()       # 正常运行
     ESTOP = auto()        # 急停已触发：NaN/Inf 或外部 emergency_stop()
-    RECOVERED = auto()    # 已恢复但未手动复位：数据恢复干净，需 reset_estop() 回到 NORMAL
+    RECOVERED = auto()    # 已恢复但未手动复位：数据恢复干净，需 reset() 回到 NORMAL
 
 
 class SafetyController:
@@ -18,7 +18,7 @@ class SafetyController:
     急停状态机：
         NORMAL → ESTOP:  validate() 检测到 NaN/Inf，或外部调用 emergency_stop()
         ESTOP → RECOVERED: 下一帧数据恢复有效（无 NaN/Inf），但指令仍被拦截
-        RECOVERED → NORMAL: 调用 reset_estop() 手动确认安全
+        RECOVERED → NORMAL: 调用 reset() 手动确认安全
     """
 
     def __init__(self, cfg: ControlConfig):
@@ -46,11 +46,11 @@ class SafetyController:
             delta=JointState(q=(0.0, 0.0, 0.0, 0.0, 0.0, 0.0)),
         )
 
-    def reset_estop(self) -> None:
-        """手动复位急停：RECOVERED → NORMAL
+    def reset(self) -> None:
+        """清除急停状态，允许恢复正常运行
 
-        仅当状态为 RECOVERED 时允许复位到 NORMAL。
-        若仍为 ESTOP 状态，需先等待数据恢复（自动进入 RECOVERED）。
+        仅当状态为 RECOVERED 时复位到 NORMAL（需手动确认安全）。
+        若仍为 ESTOP 状态，需先等待数据自动恢复（ESTOP→RECOVERED）。
         """
         if self._estop_state == EStopState.RECOVERED:
             self._estop_state = EStopState.NORMAL
