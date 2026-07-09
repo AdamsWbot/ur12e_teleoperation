@@ -1,5 +1,6 @@
 """纯数据加载 — YAML → dataclass 转换，不含任何逻辑"""
 
+import re
 from dataclasses import dataclass
 
 import yaml
@@ -86,6 +87,91 @@ class AppConfig:
     mapper: MapperConfig
 
 
+# ─── 常量 ─────────────────────────────────────────────
+
+_VALID_DEVICES = frozenset({"ur12e", "s570", "keyboard"})
+_IP_PATTERN = re.compile(
+    r"^(?:(?:25[0-5]|2[0-4]\d|[01]?\d\d?)\.){3}"
+    r"(?:25[0-5]|2[0-4]\d|[01]?\d\d?)$"
+)
+_JOINT_NAMES = ("j1", "j2", "j3", "j4", "j5", "j6")
+
+
+# ─── 校验 ─────────────────────────────────────────────
+
+def validate_config(cfg: AppConfig) -> list[str]:
+    """校验 AppConfig 完整性，返回警告/错误列表。空列表 = 全部通过。
+
+    校验规则:
+      - device 必须为 ur12e / s570 / keyboard 之一
+      - device=ur12e 时 master.ip 格式合法（IPv4）
+      - device=s570 时 s570.usb_port 非空
+      - device=keyboard 时 keyboard.joint_step > 0
+      - slave.ip 非空
+      - control.frequency > 0
+      - control.max_joint_velocity >= 0
+      - JointLimits 每关节 min < max
+      - filter.alpha 在 (0, 1]
+      - mapper.scale > 0
+    """
+    warnings: list[str] = []
+
+    # ── device ──────────────────────────────────────
+    if cfg.device not in _VALID_DEVICES:
+        warnings.append(
+            f"device 必须为 {', '.join(sorted(_VALID_DEVICES))} 之一，当前: '{cfg.device}'"
+        )
+
+    # ── master ──────────────────────────────────────
+    if cfg.device == "ur12e":
+        if not cfg.master.ip.strip():
+            warnings.append("device=ur12e 时 master.ip 不能为空")
+        elif not _IP_PATTERN.match(cfg.master.ip.strip()):
+            warnings.append(f"master.ip 格式不合法: '{cfg.master.ip}'")
+
+    # ── s570 ────────────────────────────────────────
+    if cfg.device == "s570":
+        if not cfg.s570.usb_port.strip():
+            warnings.append("device=s570 时 s570.usb_port 不能为空")
+
+    # ── keyboard ────────────────────────────────────
+    if cfg.device == "keyboard":
+        if cfg.keyboard.joint_step <= 0:
+            warnings.append(
+                f"keyboard.joint_step 必须 > 0，当前: {cfg.keyboard.joint_step}"
+            )
+
+    # ── slave ───────────────────────────────────────
+    if not cfg.slave.ip.strip():
+        warnings.append("slave.ip 不能为空")
+
+    # ── control ─────────────────────────────────────
+    if cfg.control.frequency <= 0:
+        warnings.append(f"control.frequency 必须 > 0，当前: {cfg.control.frequency}")
+    if cfg.control.max_joint_velocity < 0:
+        warnings.append(
+            f"control.max_joint_velocity 必须 >= 0，当前: {cfg.control.max_joint_velocity}"
+        )
+
+    limits = cfg.control.joint_limits
+    for jn in _JOINT_NAMES:
+        lo, hi = getattr(limits, jn)
+        if lo >= hi:
+            warnings.append(f"joint_limits.{jn}: min ({lo}) 必须 < max ({hi})")
+
+    # ── filter ──────────────────────────────────────
+    if not (0.0 < cfg.filter.alpha <= 1.0):
+        warnings.append(
+            f"filter.alpha 必须在 (0, 1] 范围内，当前: {cfg.filter.alpha}"
+        )
+
+    # ── mapper ──────────────────────────────────────
+    if cfg.mapper.scale <= 0:
+        warnings.append(f"mapper.scale 必须 > 0，当前: {cfg.mapper.scale}")
+
+    return warnings
+
+
 # ─── 加载函数 ──────────────────────────────────────────
 
 def load_app_config(path: str = "config/config.yaml") -> AppConfig:
@@ -106,3 +192,13 @@ def load_app_config(path: str = "config/config.yaml") -> AppConfig:
         filter=FilterConfig(**data["filter"]),
         mapper=MapperConfig(**data["mapper"]),
     )
+
+
+def load_and_validate(path: str = "config/config.yaml") -> tuple[AppConfig, list[str]]:
+    """加载配置并校验，返回 (AppConfig, 警告列表)。
+
+    警告列表为空表示配置完全通过校验。
+    """
+    cfg = load_app_config(path)
+    warnings = validate_config(cfg)
+    return cfg, warnings

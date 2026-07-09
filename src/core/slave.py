@@ -25,9 +25,10 @@ logger = logging.getLogger(__name__)
 # 单次 RTDE 连接尝试的超时时间（秒），会向上取整（signal.alarm 只接受整数）
 _CONNECT_ATTEMPT_TIMEOUT = 5
 
-# RTDE 端口
-_CONTROL_PORT = 50002   # RTDEControlInterface (URCap External Control)
-_RECEIVE_PORT = 30004   # RTDEReceiveInterface (RTDE data)
+# RTDE 端口 — ur_rtde 默认模式 (FLAG_UPLOAD_SCRIPT) 使用:
+_DASHBOARD_PORT = 29999  # Dashboard 服务器 — 上传/运行控制脚本
+_RECEIVE_PORT = 30004    # RTDEReceiveInterface — 实时数据流
+# 注意: port 50002 仅在 FLAG_USE_EXT_UR_CAP 模式下使用，默认模式不用
 
 
 class _ConnectTimeout(Exception):
@@ -85,7 +86,8 @@ class SlaveController:
             recv_ok = False
 
             try:
-                logger.info("  → 尝试连接 RTDEControlInterface (port %d) ...", _CONTROL_PORT)
+                logger.info("  → 尝试连接 RTDEControlInterface (Dashboard=%d, RTDE=%d) ...",
+                           _DASHBOARD_PORT, _RECEIVE_PORT)
                 self._control = self._timed_call(
                     RTDEControlInterface, self._ip,
                 )
@@ -118,9 +120,11 @@ class SlaveController:
 
             # 报告本次尝试失败原因摘要
             if not ctrl_ok and not recv_ok:
-                logger.warning("  尝试 %d 失败: 两条连接均未建立", attempt)
+                logger.warning("  尝试 %d 失败: 两条连接均未建立 (Dashboard=%d, RTDE=%d)",
+                              attempt, _DASHBOARD_PORT, _RECEIVE_PORT)
             elif not ctrl_ok:
-                logger.warning("  尝试 %d 失败: Control 口未连通 (port %d)", attempt, _CONTROL_PORT)
+                logger.warning("  尝试 %d 失败: Control 口未连通 (需 Dashboard %d + RTDE %d)",
+                              attempt, _DASHBOARD_PORT, _RECEIVE_PORT)
             else:
                 logger.warning("  尝试 %d 失败: Receive 口未连通 (port %d)", attempt, _RECEIVE_PORT)
 
@@ -136,10 +140,14 @@ class SlaveController:
         return False
 
     def _diagnose_ports(self) -> None:
-        """快速 TCP 端口可达性检查（2 秒超时），在连接前输出诊断信息。"""
+        """快速 TCP 端口可达性检查（2 秒超时），在连接前输出诊断信息。
+
+        默认模式 (FLAG_UPLOAD_SCRIPT) 使用 Dashboard (29999) 和 RTDE (30004)。
+        port 50002 仅在 FLAG_USE_EXT_UR_CAP 模式下由 RTDEControlInterface 使用。
+        """
         logger.info("─── 端口诊断 %s ───", self._ip)
-        for port, name in [(_CONTROL_PORT, "RTDE Control"),
-                           (_RECEIVE_PORT, "RTDE Receive")]:
+        for port, name in [(_DASHBOARD_PORT, "Dashboard (上传脚本)"),
+                           (_RECEIVE_PORT, "RTDE Receive (数据流)")]:
             sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
             sock.settimeout(2.0)
             result = sock.connect_ex((self._ip, port))

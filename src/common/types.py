@@ -6,12 +6,38 @@ from dataclasses import dataclass
 
 @dataclass(frozen=True)
 class JointState:
-    """6 关节状态，不可变"""
+    """6 关节状态，不可变。
+
+    支持便利接口：可直接迭代、索引和取长度，无需访问 .q 属性。
+      - list(state) → 6 元素列表
+      - state[3]   → 第 4 关节值
+      - len(state) → 总是 6
+      - for x in state: ...
+    """
     q: tuple[float, float, float, float, float, float]
 
     def __post_init__(self):
         if len(self.q) != 6:
-            raise ValueError(f"JointState requires exactly 6 values, got {len(self.q)}")
+            raise ValueError(
+                f"JointState 需要恰好 6 个关节值，实际: {len(self.q)}"
+            )
+        for i, v in enumerate(self.q):
+            if not isinstance(v, (int, float)):
+                raise TypeError(
+                    f"JointState 第 {i + 1} 个关节值类型错误: "
+                    f"期望 int 或 float，实际 {type(v).__name__} (值={v!r})"
+                )
+
+    # ── 便利接口 — 委托给 self.q ──────────────────
+
+    def __iter__(self):
+        return iter(self.q)
+
+    def __getitem__(self, index):
+        return self.q[index]
+
+    def __len__(self) -> int:
+        return 6
 
 
 @dataclass(frozen=True)
@@ -54,9 +80,12 @@ class ControlResult:
 @dataclass(frozen=True)
 class RawDeviceData:
     """device 层输出 — 原始数据，不做任何标准化。device 开发者只需懂硬件协议"""
-    joint: tuple[float, ...] | None = None   # 关节位置 (rad)，缺字段时 None
-    tcp: Pose | None = None                  # TCP 位姿，缺字段时 None
-    buttons: int = 0                         # 按钮状态位掩码，无按钮设备用默认值 0
+    joint: tuple[float, ...] | None = None            # 关节位置 (rad)，缺字段时 None
+    joint_secondary: tuple[float, ...] | None = None  # [计划2] 副侧关节（S570 另一臂）；不支持的设备为 None
+    tcp: Pose | None = None                           # TCP 位姿，缺字段时 None
+    buttons: int = 0                                  # 按钮状态位掩码，无按钮设备用默认值 0
+    axes: tuple[float, ...] | None = None             # [计划2] 模拟轴（摇杆），不支持的设备为 None
+    imu: tuple[float, ...] | None = None              # [计划2] IMU 数据，不支持的设备为 None
 
 
 # ─── 主端设备抽象接口 ──────────────────────────

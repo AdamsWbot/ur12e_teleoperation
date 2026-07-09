@@ -29,9 +29,9 @@ from src.utils.timer import Rate
 
 logger = setup_logger("run_system")
 
-# RTDE 端口
-_RTDE_CONTROL_PORT = 50002   # RTDEControlInterface
-_RTDE_RECEIVE_PORT = 30004   # RTDEReceiveInterface
+# RTDE 端口 — 默认模式 (FLAG_UPLOAD_SCRIPT) 实际使用:
+_RTDE_RECEIVE_PORT = 30004   # RTDEReceiveInterface — 实时数据流
+_DASHBOARD_PORT = 29999       # Dashboard — 上传控制脚本
 
 
 def _check_port(ip: str, port: int, timeout: float = 2.0) -> bool:
@@ -75,10 +75,10 @@ def main() -> None:
     logger.info("主端设备已连接")
 
     logger.info("正在连接从臂 %s ...", cfg.slave.ip)
-    if not _check_port(cfg.slave.ip, _RTDE_CONTROL_PORT):
+    if not _check_port(cfg.slave.ip, _DASHBOARD_PORT):
         logger.error(
-            "从臂 %s:%d 端口不可达，请确认 URSim/实机已启动",
-            cfg.slave.ip, _RTDE_CONTROL_PORT,
+            "从臂 %s:%d (Dashboard) 端口不可达，请确认实机已启动且在同一网络",
+            cfg.slave.ip, _DASHBOARD_PORT,
         )
         device.disconnect()
         return
