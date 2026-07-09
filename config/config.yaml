@@ -11,6 +11,10 @@ master:
 
 s570:
   usb_port: "/dev/ttyUSB0"
+  active_arm: "left"                       # left | right
+  enable_calibration: true                 # 启动时自动零点校准
+  joint_mapping: [1, 2, 3, 4, 5, 6]       # S570→UR 关节索引 (1-based)，默认 1:1 丢弃 J7
+  joint_direction: [1, 1, 1, 1, 1, 1]     # 方向 ±1，实机标定后调整
 
 keyboard:
   joint_step: 0.01

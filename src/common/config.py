@@ -19,6 +19,10 @@ class MasterConfig:
 @dataclass
 class S570Config:
     usb_port: str
+    active_arm: str = "left"                       # [计划2] "left" | "right"
+    enable_calibration: bool = True                # [计划2] 启动时自动零点校准
+    joint_mapping: tuple[int, ...] = (1, 2, 3, 4, 5, 6)  # [计划2] S570→UR 关节索引 (1-based, 6个)
+    joint_direction: tuple[int, ...] = (1, 1, 1, 1, 1, 1) # [计划2] 方向 ±1
 
 
 @dataclass
@@ -133,6 +137,12 @@ def validate_config(cfg: AppConfig) -> list[str]:
     if cfg.device == "s570":
         if not cfg.s570.usb_port.strip():
             warnings.append("device=s570 时 s570.usb_port 不能为空")
+        if cfg.s570.active_arm not in ("left", "right"):
+            warnings.append(
+                f"s570.active_arm 必须为 left 或 right，当前: '{cfg.s570.active_arm}'"
+            )
+        _validate_s570_mapping(cfg, warnings)
+        _validate_s570_direction(cfg, warnings)
 
     # ── keyboard ────────────────────────────────────
     if cfg.device == "keyboard":
@@ -170,6 +180,40 @@ def validate_config(cfg: AppConfig) -> list[str]:
         warnings.append(f"mapper.scale 必须 > 0，当前: {cfg.mapper.scale}")
 
     return warnings
+
+
+def _validate_s570_mapping(cfg: AppConfig, warnings: list[str]) -> None:
+    """校验 s570.joint_mapping: 长度=6, 值∈{1..7}, 无重复。"""
+    mapping = cfg.s570.joint_mapping
+    if len(mapping) != 6:
+        warnings.append(
+            f"s570.joint_mapping 需要恰好 6 个元素，当前: {len(mapping)}"
+        )
+        return
+    for val in mapping:
+        if val not in range(1, 8):
+            warnings.append(
+                f"s570.joint_mapping 每个值必须在 1–7 范围内，当前含: {val}"
+            )
+            break
+    if len(set(mapping)) != len(mapping):
+        warnings.append(f"s570.joint_mapping 包含重复值: {mapping}")
+
+
+def _validate_s570_direction(cfg: AppConfig, warnings: list[str]) -> None:
+    """校验 s570.joint_direction: 长度=6, 每个值 ∈ {1, -1}。"""
+    direction = cfg.s570.joint_direction
+    if len(direction) != 6:
+        warnings.append(
+            f"s570.joint_direction 需要恰好 6 个元素，当前: {len(direction)}"
+        )
+        return
+    for i, val in enumerate(direction):
+        if val not in (1, -1):
+            warnings.append(
+                f"s570.joint_direction[{i}] 必须为 1 或 -1，当前: {val}"
+            )
+            break
 
 
 # ─── 加载函数 ──────────────────────────────────────────
