@@ -28,7 +28,7 @@ logger = setup_logger("run_system")
 
 def main() -> None:
     # ── 1. 加载 + 校验配置 ────────────────────────────
-    cfg, warnings = load_and_validate()
+    cfg, warnings = load_and_validate(str(_project_root / "config" / "config.yaml"))
     for w in warnings:
         logger.warning("配置警告: %s", w)
     logger.info("Config loaded: device=%s, frequency=%d Hz",
@@ -58,6 +58,16 @@ def main() -> None:
         device.disconnect()
         return
     logger.info("从臂已连接")
+
+    # ── 3.5. 非 UR12e 主端：对齐键盘/S570 初始位置到从臂 ────
+    if cfg.device != "ur12e":
+        slave_state = slave.get_state()
+        if slave_state is not None and hasattr(device, "sync_initial_position"):
+            device.sync_initial_position(slave_state.joint.q)
+            logger.info("主端已同步从臂位置: %s",
+                        [f"{v:.3f}" for v in slave_state.joint.q])
+        elif slave_state is None:
+            logger.warning("无法读取从臂位置，键盘从零位开始")
 
     # ── 4. S570 零点校准（第一帧）─────────────────────────
     if cfg.device == "s570" and cfg.s570.enable_calibration:
