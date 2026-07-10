@@ -35,3 +35,6 @@ local.properties
 # 备份/临时压缩包
 *.zip
 *.tar.gz
+
+#test
+mytest/*
