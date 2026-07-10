@@ -1,0 +1,1 @@
+s570_bridge.py传送WINDOWS串口信息给WSL，要启动串口需启动这个
