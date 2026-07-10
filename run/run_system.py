@@ -10,6 +10,7 @@
   python run/run_system.py
 """
 
+import os
 import sys
 from pathlib import Path
 
@@ -40,6 +41,13 @@ def main() -> None:
     device     = factory.create_device()
     normalizer = factory.create_normalizer()
     mapper     = factory.create_mapper()
+
+    # ── 测试模式：通过环境变量指定只测某个关节 ──────
+    _test_joint = os.environ.get("TEST_JOINT")
+    if _test_joint is not None and hasattr(mapper, "set_test_joint"):
+        mapper.set_test_joint(int(_test_joint))
+        logger.info("测试模式: 仅关节 %s", _test_joint)
+
     controller = factory.create_controller()
     ema        = factory.create_filter()
     slave      = factory.create_slave()
@@ -59,27 +67,27 @@ def main() -> None:
         return
     logger.info("从臂已连接")
 
-    # ── 3.5. 非 UR12e 主端：对齐键盘/S570 初始位置到从臂 ────
-    if cfg.device != "ur12e":
+    # ── 4. S570 增量参考帧（启动时记录）─────────────────────
+    if cfg.device == "s570":
         slave_state = slave.get_state()
-        if slave_state is not None and hasattr(device, "sync_initial_position"):
-            device.sync_initial_position(slave_state.joint.q)
-            logger.info("主端已同步从臂位置: %s",
-                        [f"{v:.3f}" for v in slave_state.joint.q])
-        elif slave_state is None:
-            logger.warning("无法读取从臂位置，键盘从零位开始")
+        if slave_state is None:
+            logger.error("无法读取从臂位置，退出")
+            device.disconnect()
+            slave.disconnect()
+            return
+        slave_ref = slave_state.joint.q
+        logger.info("从臂起始位置: %s", [f"{v:.3f}" for v in slave_ref])
 
-    # ── 4. S570 零点校准（第一帧）─────────────────────────
-    if cfg.device == "s570" and cfg.s570.enable_calibration:
         raw = device.read()
-        state = normalizer.normalize(raw)
-        # calibrate() 内部完成 7→6 映射后再记录 6 关节零点偏移
-        mapper.calibrate(state.joint)
-        logger.info("S570 校准完成: %s",
-                    [f"{v:.3f}" for v in state.joint.q])
+        s570_ref = normalizer.normalize(raw).joint.q
+        logger.info("S570 当前姿态: %s", [f"{v:.3f}" for v in s570_ref])
+
+        mapper.set_relative_reference(s570_ref, slave_ref)
+        logger.info("增量模式已设置: 从臂保持原位，S570 偏移量增量叠加")
 
     # ── 5. 主循环 ──────────────────────────────────────
     prev_cmd = None
+    frame_count = 0
     logger.info("Pipeline 启动，按 Ctrl+C 退出")
 
     try:
@@ -89,6 +97,11 @@ def main() -> None:
 
             # ② 标准化为 RobotState
             state = normalizer.normalize(raw)
+
+            # 每 125 帧（约 1 秒）打印一次主端位置
+            frame_count += 1
+            if frame_count % 125 == 0:
+                logger.info("主端: %s", [f"{v:.3f}" for v in state.joint.q])
 
             # ③ 映射为 RobotCommand
             cmd = mapper.map(state, prev_cmd)

@@ -15,7 +15,7 @@ mapper.py 单元测试
     ▼
   s570.py
     │  S570Reader(cfg)
-    │  read(): 串口读7关节 → joint_mapping选6个 → 度→弧度
+    │  read(): 串口读6关节 → joint_mapping选6个 → 度→弧度
     │  RawDeviceData(joint=6轴弧度, tcp=None, buttons=位掩码)
     ▼
   master.py
@@ -209,8 +209,8 @@ class TestS570Mapper:
 
     def test_set_joint_mapping_custom(self):
         m = S570Mapper(_limits())
-        m.set_joint_mapping((2, 3, 4, 5, 6, 7))
-        assert m.joint_mapping == (2, 3, 4, 5, 6, 7)
+        m.set_joint_mapping((2, 1, 3, 4, 5, 6))
+        assert m.joint_mapping == (2, 1, 3, 4, 5, 6)
 
     def test_set_joint_mapping_bad_length(self):
         m = S570Mapper(_limits())
@@ -219,8 +219,8 @@ class TestS570Mapper:
 
     def test_set_joint_mapping_out_of_range(self):
         m = S570Mapper(_limits())
-        with pytest.raises(ValueError, match="1-7"):
-            m.set_joint_mapping((1, 2, 3, 4, 5, 8))
+        with pytest.raises(ValueError, match="1-6"):
+            m.set_joint_mapping((1, 2, 3, 4, 5, 7))
 
     def test_set_joint_mapping_duplicate(self):
         m = S570Mapper(_limits())
@@ -252,25 +252,21 @@ class TestKeyboardMapper:
 
 
 # ═══════════════════════════════════════════════════════
-#  S570 joint_mapping 7→6 裁剪（纯逻辑，模拟 s570.py）
+#  S570 joint_mapping（6 关节纯逻辑，模拟 s570.py）
 # ═══════════════════════════════════════════════════════
 
 class TestJointMapping:
     """验证 s570.py 的 joint_mapping 逻辑 — 与 config.yaml 对应"""
 
-    # 模拟 S570 读取的 7 个关节（度）
-    _ANGLES_7 = [10.0, 20.0, 30.0, 40.0, 50.0, 60.0, 70.0]
+    # 模拟 S570 读取的 6 个关节（度）
+    _ANGLES_6 = [10.0, 20.0, 30.0, 40.0, 50.0, 60.0]
 
     def _select(self, mapping):
-        return [self._ANGLES_7[i - 1] for i in mapping]
+        return [self._ANGLES_6[i - 1] for i in mapping]
 
-    def test_default_keep_first_6(self):
-        """joint_mapping=[1,2,3,4,5,6] → 丢弃 J7"""
+    def test_default_passthrough(self):
+        """joint_mapping=[1,2,3,4,5,6] → 1:1 透传"""
         assert self._select((1, 2, 3, 4, 5, 6)) == [10, 20, 30, 40, 50, 60]
-
-    def test_keep_last_6(self):
-        """joint_mapping=[2,3,4,5,6,7] → 丢弃 J1"""
-        assert self._select((2, 3, 4, 5, 6, 7)) == [20, 30, 40, 50, 60, 70]
 
     def test_reorder(self):
         """j2↔j3 交换顺序"""
@@ -280,7 +276,7 @@ class TestJointMapping:
         """s570 joint_mapping → mapper 完整流水线"""
         # s570.py: joint_mapping 选择 6 关节，度→弧度
         mapping = (1, 2, 3, 4, 5, 6)
-        joint_rad = tuple(math.radians(self._ANGLES_7[i - 1]) for i in mapping)
+        joint_rad = tuple(math.radians(self._ANGLES_6[i - 1]) for i in mapping)
 
         # master.py: 标准化 → RobotState
         state = _state(*joint_rad)

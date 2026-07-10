@@ -1,3 +1,4 @@
+import io
 import sys
 import termios
 import threading
@@ -30,16 +31,21 @@ class KeyboardReader(MasterReader):
         self._old_term = None
 
     def connect(self) -> bool:
+        if not hasattr(sys.stdin, "fileno") or not sys.stdin.isatty():
+            print("[KeyboardReader] 当前终端不支持键盘输入，跳过")
+            self._connected = True
+            return True
         try:
             self._old_term = termios.tcgetattr(sys.stdin)
             tty.setraw(sys.stdin)
-        except termios.error:
+        except (termios.error, io.UnsupportedOperation):
             self._old_term = None
 
         self._running = True
         self._connected = True
-        self._thread = threading.Thread(target=self._listen_keys, daemon=True)
-        self._thread.start()
+        if hasattr(sys.stdin, "fileno") and sys.stdin.isatty():
+            self._thread = threading.Thread(target=self._listen_keys, daemon=True)
+            self._thread.start()
         return True
 
     def disconnect(self) -> None:

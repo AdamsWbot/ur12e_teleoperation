@@ -128,7 +128,7 @@ class S570Mapper(Mapper):
     """S570 外骨骼 → UR12e 关节映射
 
     S570 是人体外骨骼（文档: docs.elephantrobotics.com/docs/myController-S570-cn/），
-    每臂 7 关节（J1-J7），±180° 范围。
+    每臂 6 关节（J1-J6），±180° 范围。
 
     ── config.yaml → 代码链接 ──────────────────────
     s570.joint_mapping   → s570.py 选6个关节 + mapper.set_joint_mapping() 存映射
@@ -138,7 +138,7 @@ class S570Mapper(Mapper):
     s570.enable_calibration → run_system.py 调用 mapper.calibrate()
 
     ── 数据流（全链路）─────────────────────────────
-    s570.py: 读 7 关节 → joint_mapping 选 6 → RawDeviceData(6, 弧度)
+    s570.py: 读 6 关节 → joint_mapping 选 6 → RawDeviceData(6, 弧度)
     master.py: 时间戳 + 补零 → RobotState(6)
     mapper.py: calibrate + direction×scale+offset → RobotCommand(6)
 
@@ -154,19 +154,37 @@ class S570Mapper(Mapper):
         super().__init__(joint_limits)
         # 与 s570.py 共享的映射配置，由 run_system.py 调用 set_joint_mapping() 同步
         self._joint_mapping: tuple[int, ...] = (1, 2, 3, 4, 5, 6)
+        # 测试模式：None=全关节, 整数=只测试该关节(-1=全关闭)
+        self._test_joint: int | None = None
+        # 增量模式：记录 S570 参考帧和从臂起始位置
+        self._s570_reference: tuple[float, ...] | None = None
+        self._slave_reference: tuple[float, ...] | None = None
+
+    def set_test_joint(self, joint_idx: int | None) -> None:
+        """逐个测试关节：传入 0-5 只让该关节移动，其他锁死为 0；传入 None 恢复全部。
+        -1 = 全关节锁定为 0（停止一切运动）"""
+        self._test_joint = joint_idx
+
+    def set_relative_reference(
+        self, s570_ref: tuple[float, ...], slave_ref: tuple[float, ...]
+    ) -> None:
+        """增量模式：S570 参考帧 + 从臂起始位置。
+        之后每帧输出 = slave_ref + direction*scale*(S570_current - s570_ref)"""
+        self._s570_reference = s570_ref
+        self._slave_reference = slave_ref
 
     def set_joint_mapping(self, mapping: tuple[int, ...]) -> None:
         """设置 S570→UR 关节映射（来自 config.yaml s570.joint_mapping）。
 
-        1-based 索引，6 个元素，值 ∈ {1..7}，无重复。
+        1-based 索引，6 个元素，值 ∈ {1..6}，无重复。
         此值需与 S570Reader._mapping 一致——两者均源自 config.yaml
         同一字段，实机调试时修改 config 即可同步。
         """
         if len(mapping) != 6:
             raise ValueError(f"joint_mapping 需要恰好 6 个元素，实际: {len(mapping)}")
         for val in mapping:
-            if val not in range(1, 8):
-                raise ValueError(f"joint_mapping 值必须在 1-7，实际含: {val}")
+            if val not in range(1, 7):
+                raise ValueError(f"joint_mapping 值必须在 1-6，实际含: {val}")
         if len(set(mapping)) != len(mapping):
             raise ValueError(f"joint_mapping 包含重复值: {mapping}")
         self._joint_mapping = tuple(mapping)
@@ -177,7 +195,31 @@ class S570Mapper(Mapper):
         return self._joint_mapping
 
     def _map_joint(self, joint: JointState) -> JointState:
-        return self._apply_transform(joint)
+        if self._s570_reference is not None and self._slave_reference is not None:
+            # 增量模式：slave_ref + direction*scale*(S570_current - S570_ref)
+            q = tuple(
+                sr + d * self._scale * (j - s570r)
+                for sr, d, j, s570r in zip(
+                    self._slave_reference, self._direction,
+                    joint.q, self._s570_reference,
+                )
+            )
+            result = JointState(q=q)
+        else:
+            result = self._apply_transform(joint)
+
+        if self._test_joint is not None:
+            if self._test_joint == -1:
+                if self._slave_reference is not None:
+                    return JointState(q=self._slave_reference)
+                return JointState(q=(0.0,) * 6)
+            q = list(result.q)
+            default = self._slave_reference if self._slave_reference is not None else (0.0,) * 6
+            for i in range(6):
+                if i != self._test_joint:
+                    q[i] = default[i]
+            return JointState(q=tuple(q))
+        return result
 
 
 class KeyboardMapper(Mapper):

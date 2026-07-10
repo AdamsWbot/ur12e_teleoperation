@@ -191,9 +191,9 @@ def _validate_s570_mapping(cfg: AppConfig, warnings: list[str]) -> None:
         )
         return
     for val in mapping:
-        if val not in range(1, 8):
+        if val not in range(1, 7):
             warnings.append(
-                f"s570.joint_mapping 每个值必须在 1–7 范围内，当前含: {val}"
+                f"s570.joint_mapping 每个值必须在 1–6 范围内，当前含: {val}"
             )
             break
     if len(set(mapping)) != len(mapping):
