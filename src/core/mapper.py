@@ -128,7 +128,7 @@ class S570Mapper(Mapper):
     """S570 外骨骼 → UR12e 关节映射
 
     S570 是人体外骨骼（文档: docs.elephantrobotics.com/docs/myController-S570-cn/），
-    每臂 6 关节（J1-J6），±180° 范围。
+    每臂 7 关节（J1-J7），±180° 范围。
 
     ── config.yaml → 代码链接 ──────────────────────
     s570.joint_mapping   → s570.py 选6个关节 + mapper.set_joint_mapping() 存映射
@@ -183,8 +183,8 @@ class S570Mapper(Mapper):
         if len(mapping) != 6:
             raise ValueError(f"joint_mapping 需要恰好 6 个元素，实际: {len(mapping)}")
         for val in mapping:
-            if val not in range(1, 7):
-                raise ValueError(f"joint_mapping 值必须在 1-6，实际含: {val}")
+            if val not in range(1, 8):
+                raise ValueError(f"joint_mapping 值必须在 1-7，实际含: {val}")
         if len(set(mapping)) != len(mapping):
             raise ValueError(f"joint_mapping 包含重复值: {mapping}")
         self._joint_mapping = tuple(mapping)

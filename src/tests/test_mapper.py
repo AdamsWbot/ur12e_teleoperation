@@ -219,8 +219,8 @@ class TestS570Mapper:
 
     def test_set_joint_mapping_out_of_range(self):
         m = S570Mapper(_limits())
-        with pytest.raises(ValueError, match="1-6"):
-            m.set_joint_mapping((1, 2, 3, 4, 5, 7))
+        with pytest.raises(ValueError, match="1-7"):
+            m.set_joint_mapping((1, 2, 3, 4, 5, 8))
 
     def test_set_joint_mapping_duplicate(self):
         m = S570Mapper(_limits())
@@ -258,15 +258,19 @@ class TestKeyboardMapper:
 class TestJointMapping:
     """验证 s570.py 的 joint_mapping 逻辑 — 与 config.yaml 对应"""
 
-    # 模拟 S570 读取的 6 个关节（度）
-    _ANGLES_6 = [10.0, 20.0, 30.0, 40.0, 50.0, 60.0]
+    # 模拟 S570 读取的 7 个关节（度），joint_mapping 从中选 6 个
+    _ANGLES_7 = [10.0, 20.0, 30.0, 40.0, 50.0, 60.0, 70.0]
 
     def _select(self, mapping):
-        return [self._ANGLES_6[i - 1] for i in mapping]
+        return [self._ANGLES_7[i - 1] for i in mapping]
 
     def test_default_passthrough(self):
-        """joint_mapping=[1,2,3,4,5,6] → 1:1 透传"""
+        """joint_mapping=[1,2,3,4,5,6] → 1:1 取前6"""
         assert self._select((1, 2, 3, 4, 5, 6)) == [10, 20, 30, 40, 50, 60]
+
+    def test_skip_j3(self):
+        """joint_mapping=[1,2,4,5,6,7] → 跳过 J3"""
+        assert self._select((1, 2, 4, 5, 6, 7)) == [10, 20, 40, 50, 60, 70]
 
     def test_reorder(self):
         """j2↔j3 交换顺序"""
@@ -276,7 +280,7 @@ class TestJointMapping:
         """s570 joint_mapping → mapper 完整流水线"""
         # s570.py: joint_mapping 选择 6 关节，度→弧度
         mapping = (1, 2, 3, 4, 5, 6)
-        joint_rad = tuple(math.radians(self._ANGLES_6[i - 1]) for i in mapping)
+        joint_rad = tuple(math.radians(self._ANGLES_7[i - 1]) for i in mapping)
 
         # master.py: 标准化 → RobotState
         state = _state(*joint_rad)

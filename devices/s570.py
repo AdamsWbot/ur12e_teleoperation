@@ -54,14 +54,35 @@ class S570Reader(MasterReader):
         self._connected = False
 
     def read(self) -> RawDeviceData:
-        """从 TCP 桥接读取 6 关节数据，返回 RawDeviceData。"""
-        with self._lock:
-            raw = self._recv_frame()
+        """排空 TCP 缓冲后读取最新的 6 关节数据。"""
+        raw = self._drain_and_get_latest()
+        if not raw:
+            raise IOError("S570: no data from bridge")
         angles_deg = self._parse_angles(raw)
         joint = tuple(
             math.radians(angles_deg[idx - 1]) for idx in self._mapping
         )
         return RawDeviceData(joint=joint, tcp=None)
+
+    def _drain_and_get_latest(self) -> bytes | None:
+        """排空缓冲区，返回最后一帧完整数据。"""
+        self._sock.settimeout(0)
+        latest = None
+        drained_any = False
+        while True:
+            try:
+                frame = self._recv_frame()
+                if frame:
+                    latest = frame
+                    drained_any = True
+            except (socket.timeout, BlockingIOError):
+                break
+        if not drained_any:
+            # 没有积压，等一帧
+            self._sock.settimeout(2)
+            latest = self._recv_frame()
+        self._sock.settimeout(1)
+        return latest
 
     @property
     def is_connected(self) -> bool:
@@ -91,7 +112,7 @@ class S570Reader(MasterReader):
     def _parse_angles(self, data: bytes) -> list[float]:
         hex_str = data.hex()[2:]  # skip command echo byte
         angles = []
-        for i in range(6):
+        for i in range(7):
             hex_val = hex_str[i * 4 : (i + 1) * 4]
             if len(hex_val) < 4:
                 break

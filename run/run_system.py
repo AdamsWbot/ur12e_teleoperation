@@ -42,6 +42,12 @@ def main() -> None:
     normalizer = factory.create_normalizer()
     mapper     = factory.create_mapper()
 
+    # ── 加载 S570 关节映射配置 ───────────────────
+    if cfg.device == "s570" and hasattr(mapper, "set_all_directions"):
+        mapper.set_all_directions(cfg.s570.joint_direction)
+        mapper.set_joint_mapping(cfg.s570.joint_mapping)
+        logger.info("S570 方向: %s, 映射: %s", cfg.s570.joint_direction, cfg.s570.joint_mapping)
+
     # ── 测试模式：通过环境变量指定只测某个关节 ──────
     _test_joint = os.environ.get("TEST_JOINT")
     if _test_joint is not None and hasattr(mapper, "set_test_joint"):
@@ -101,7 +107,8 @@ def main() -> None:
             # 每 125 帧（约 1 秒）打印一次主端位置
             frame_count += 1
             if frame_count % 125 == 0:
-                logger.info("主端: %s", [f"{v:.3f}" for v in state.joint.q])
+                deg = [f"{v * 57.2958:.1f}" for v in state.joint.q]
+                logger.info("主端(度): %s", deg)
 
             # ③ 映射为 RobotCommand
             cmd = mapper.map(state, prev_cmd)

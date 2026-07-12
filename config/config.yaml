@@ -5,16 +5,16 @@ device: "s570"
 
 master:
   ip: "192.168.1.100"
-  rtde_frequency: 125
+  rtde_frequency: 600
   max_retries: 3
   retry_interval: 1.0
 
 s570:
   usb_port: "/dev/ttyS7"
-  active_arm: "left"                       # left | right
+  active_arm: "right"                       # left | right
   enable_calibration: true                 # 启动时自动零点校准
-  joint_mapping: [1, 2, 3, 4, 5, 6]       # S570→UR 关节索引 (1-based)，默认 1:1 透传
-  joint_direction: [1, 1, 1, 1, 1, 1]     # 方向 ±1，实机标定后调整
+  joint_mapping: [1, 2, 4, 5, 6, 7]       # S570→UR 关节索引，跳过 J3
+  joint_direction: [-1, -1, -1, 1, 1, 1]     # 方向 ±1，实机标定后调整
 
 keyboard:
   joint_step: 0.01
@@ -23,7 +23,7 @@ keyboard:
 
 slave:
   ip: "192.168.1.100"
-  rtde_frequency: 125
+  rtde_frequency: 600
   servoj_lookahead_time: 0.03
   servoj_gain: 100
   max_retries: 3
@@ -32,7 +32,7 @@ slave:
 # ─── 安全控制 ────────────────────────────────────
 
 control:
-  frequency: 125
+  frequency: 600
   max_joint_velocity: 1.2
   enable_velocity_limit: true
   enable_joint_limit: true
