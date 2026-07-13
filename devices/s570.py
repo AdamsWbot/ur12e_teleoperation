@@ -111,8 +111,10 @@ class S570Reader(MasterReader):
 
     def _parse_angles(self, data: bytes) -> list[float]:
         hex_str = data.hex()[2:]  # skip command echo byte
+        # 解析足够覆盖 joint_mapping 最大索引的角度值
+        n = max(self._mapping)
         angles = []
-        for i in range(7):
+        for i in range(n):
             hex_val = hex_str[i * 4 : (i + 1) * 4]
             if len(hex_val) < 4:
                 break

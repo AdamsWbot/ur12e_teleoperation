@@ -11,6 +11,7 @@
 """
 
 import os
+import signal
 import sys
 from pathlib import Path
 
@@ -20,6 +21,7 @@ if str(_project_root) not in sys.path:
     sys.path.insert(0, str(_project_root))
 
 from src.common.config import load_and_validate
+from src.common.types import JointState, RobotCommand
 from src.core.factory import SystemFactory
 from src.utils.logger import setup_logger
 from src.utils.timer import Rate
@@ -28,6 +30,9 @@ logger = setup_logger("run_system")
 
 
 def main() -> None:
+    # ── 0. Ctrl+C 加固 ────────────────────────────────
+    signal.signal(signal.SIGINT, lambda signum, frame: sys.exit(0))
+
     # ── 1. 加载 + 校验配置 ────────────────────────────
     cfg, warnings = load_and_validate(str(_project_root / "config" / "config.yaml"))
     for w in warnings:
@@ -73,6 +78,22 @@ def main() -> None:
         return
     logger.info("从臂已连接")
 
+    # ── 3.5. 键盘: 对齐虚拟关节 + 设限速 ─────────────────
+    kb_slave_ref = None
+    if cfg.device == "keyboard":
+        slave_state = slave.get_state()
+        if slave_state is not None and hasattr(device, "sync_initial_position"):
+            kb_slave_ref = slave_state.joint.q
+            device.sync_initial_position(kb_slave_ref)
+            logger.info("键盘已同步从臂位置: %s",
+                        [f"{v:.3f}" for v in kb_slave_ref])
+        # 键盘内部限速: max_step = max_joint_velocity / frequency
+        max_step = cfg.control.max_joint_velocity / cfg.control.frequency
+        if hasattr(mapper, "set_speed_limit"):
+            mapper.set_speed_limit(max_step)
+            logger.info("键盘限速: %.4f rad/帧 (%.1f rad/s)",
+                        max_step, cfg.control.max_joint_velocity)
+
     # ── 4. S570 增量参考帧（启动时记录）─────────────────────
     if cfg.device == "s570":
         slave_state = slave.get_state()
@@ -93,6 +114,7 @@ def main() -> None:
 
     # ── 5. 主循环 ──────────────────────────────────────
     prev_cmd = None
+    first_frame = True
     frame_count = 0
     logger.info("Pipeline 启动，按 Ctrl+C 退出")
 
@@ -112,6 +134,28 @@ def main() -> None:
 
             # ③ 映射为 RobotCommand
             cmd = mapper.map(state, prev_cmd)
+
+            # ── 首帧安全锁 ──
+            if first_frame:
+                if cfg.device == "keyboard" and kb_slave_ref is not None:
+                    cmd = RobotCommand(
+                        timestamp=cmd.timestamp,
+                        joint=JointState(q=kb_slave_ref),
+                        delta=JointState(q=(0.0,) * 6),
+                    )
+                    logger.info("首帧锁定(键盘): %s",
+                                [f"{v:.3f}" for v in kb_slave_ref])
+                else:
+                    live_state = slave.get_state()
+                    if live_state is not None:
+                        cmd = RobotCommand(
+                            timestamp=cmd.timestamp,
+                            joint=live_state.joint,
+                            delta=JointState(q=(0.0,) * 6),
+                        )
+                        logger.info("首帧锁定: %s",
+                                    [f"{v:.3f}" for v in live_state.joint.q])
+                first_frame = False
 
             # ④ 安全校验
             result = controller.validate(cmd)

@@ -23,7 +23,7 @@ from src.common.types import JointState, Pose, RobotCommand, RobotState
 logger = logging.getLogger(__name__)
 
 # 单次 RTDE 连接尝试的超时时间（秒），会向上取整（signal.alarm 只接受整数）
-_CONNECT_ATTEMPT_TIMEOUT = 5
+_CONNECT_ATTEMPT_TIMEOUT = 10  # 实机脚本上传可能 >5s
 
 # RTDE 端口 — ur_rtde 默认模式 (FLAG_UPLOAD_SCRIPT) 使用:
 _DASHBOARD_PORT = 29999  # Dashboard 服务器 — 上传/运行控制脚本

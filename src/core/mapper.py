@@ -223,24 +223,41 @@ class S570Mapper(Mapper):
 
 
 class KeyboardMapper(Mapper):
-    """Keyboard 虚拟关节映射。
+    """Keyboard 虚拟关节映射 — 带内部限速。
 
-    KeyboardReader 负责按键采集并维护 6 关节虚拟累加器，输出到
-    RobotState.joint 后已经是统一的绝对关节目标。本 Mapper 的职责是
-    将该虚拟绝对关节桥接为标准 RobotCommand，并保持 delta 语义与
-    UR12e/S570 一致，供后续 control/filter/slave 复用同一条 pipeline。
+    在 map() 中直接截断目标位置，避免键盘 _q 超前 prev_cmd 造成 backlog
+    — 这是 SafetyController 截断方式无法做到的（SafetyController 截断后
+    prev_cmd 落后，backlog 持续累积）。
+
+    set_speed_limit(max_step) 由 run_system.py 在启动时设置。
     """
+
+    def __init__(self, joint_limits: JointLimits):
+        super().__init__(joint_limits)
+        self._max_step: float | None = None  # rad/frame
+
+    def set_speed_limit(self, max_step: float) -> None:
+        """设置每帧最大步长 (rad)，来自 max_joint_velocity / frequency。"""
+        self._max_step = max_step
 
     def map(
         self,
         state: RobotState,
         prev_command: RobotCommand | None,
     ) -> RobotCommand:
-        """将键盘虚拟关节状态转换为统一的绝对 RobotCommand。
+        target = list(state.joint.q)
 
-        第一帧 delta 置零；后续帧 delta = 当前绝对目标 - 上一帧绝对目标。
-        """
-        target_joint = self._map_joint(state.joint)
+        # 内部限速: 截断目标位置，不产生 backlog
+        if self._max_step is not None and prev_command is not None:
+            prev = prev_command.joint.q
+            for i in range(6):
+                d = target[i] - prev[i]
+                if d > self._max_step:
+                    target[i] = prev[i] + self._max_step
+                elif d < -self._max_step:
+                    target[i] = prev[i] - self._max_step
+
+        target_joint = JointState(q=tuple(target))
         previous_joint = target_joint if prev_command is None else prev_command.joint
         return RobotCommand(
             timestamp=state.timestamp,

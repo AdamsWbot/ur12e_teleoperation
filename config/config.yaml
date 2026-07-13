@@ -1,11 +1,11 @@
 # UR12e 主从机械臂遥操作 — 统一配置文件
 # 切换主端设备: 改 device → ur12e | s570 | keyboard
 
-device: "s570"
+device: "keyboard"  # ur12e | s570 | keyboard
 
 master:
   ip: "192.168.1.100"
-  rtde_frequency: 600
+  rtde_frequency: 50
   max_retries: 3
   retry_interval: 1.0
 
@@ -23,8 +23,8 @@ keyboard:
 
 slave:
   ip: "192.168.1.100"
-  rtde_frequency: 600
-  servoj_lookahead_time: 0.03
+  rtde_frequency: 50
+  servoj_lookahead_time: 0.06
   servoj_gain: 100
   max_retries: 3
   retry_interval: 1.0
@@ -32,8 +32,8 @@ slave:
 # ─── 安全控制 ────────────────────────────────────
 
 control:
-  frequency: 600
-  max_joint_velocity: 1.2
+  frequency: 50
+  max_joint_velocity: 0.6
   enable_velocity_limit: true
   enable_joint_limit: true
   joint_limits:
@@ -48,7 +48,7 @@ control:
 
 filter:
   enable: true
-  alpha: 0.2
+  alpha: 0.6
 
 # ─── 主从映射 ────────────────────────────────────
 
